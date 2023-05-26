@@ -7,4 +7,5 @@ find_package( OpenCV REQUIRED )
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 include_directories(./include)
 
-add_executable(logcolors src/main.cpp)
+add_executable(logcolors src/main.cpp src/SharedDataTypes.cpp src/ConfigReader.cpp src/Renderer.cpp)
+target_link_libraries(logcolors ${OpenCV_LIBS})

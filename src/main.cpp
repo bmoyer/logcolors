@@ -8,52 +8,11 @@
 #include <iostream>
 #include <regex>
 
-struct Color {
-    int r;
-    int g;
-    int b;
+#include "SharedDataTypes.h"
+#include "ConfigReader.h"
+#include "Renderer.h"
 
-    Color(int r, int g, int b) {
-        this->r = r;
-        this->g = g;
-        this->b = g;
-    }
-};
-
-std::ostream& operator<<(std::ostream& os, const Color& color) {
-    return os << "[" << color.r << ", " << color.g << ", " << color.b << "]";
-}
-
-std::map<std::string, Color> getColorMap(std::string configFilePath) {
-    std::ifstream inputFile(configFilePath);
-    std::map<std::string, Color> regexToColor;
-    std::smatch match;
-
-    std::regex lineRegex(R"((.*),(\d+),(\d+),(\d+))");
-
-    std::string line;
-    while(std::getline(inputFile, line)) {
-        std::smatch match;
-
-        if (std::regex_match(line, match, lineRegex)) {
-            std::string regexStr = match[1].str();
-            int r = std::stoi(match[2].str());
-            int g = std::stoi(match[3].str());
-            int b = std::stoi(match[4].str());
-            
-            Color color(r, g, b);
-            regexToColor.emplace(regexStr, color);
-            std::cout << "Regex \"" << regexStr << "\" mapped to " << color << std::endl;
-        }
-        else {
-            throw std::runtime_error("Failed to parse config file, got: " + line);
-        }
-    }
-
-    return regexToColor;
-}
-
-// TODO: prevent or handle multiple matches in 1 log line (either add both and print a warning, or disallow)
+// TODO: multithread this, regex is a bottleneck
 std::vector<Color> createColorSequenceFromLog(std::map<std::string, Color> regexToColor, std::string logFilePath) {
     std::vector<Color> colorSequence;
 
@@ -66,12 +25,14 @@ std::vector<Color> createColorSequenceFromLog(std::map<std::string, Color> regex
             std::regex logPattern(it->first);
             std::smatch match;
             if(std::regex_match(line, match, logPattern)) {
-                std::cout << "Line \"" << line << "\" matched expression:" << it->first << std::endl;
+                //std::cout << "Line \"" << line << "\" matched expression:" << it->first << std::endl;
+                colorSequence.push_back(it->second);
                 matchesForLine++;
             }
         }
 
         if(matchesForLine > 1) {
+            // Allow a new bar to be drawn for each regex matching this line and log a warning
             std::cout << "Warning: line " << lineNum << " matched " << matchesForLine << " expressions\n";
         }
         lineNum++;
@@ -84,13 +45,19 @@ int main(int argc, char* argv[]) {
     std::string configFilePath = argv[1];
     std::string logFilePath = argv[2];
 
-    std::map<std::string, Color> regexToColor = getColorMap(configFilePath);
+    std::map<std::string, Color> regexToColor = ConfigReader::getColorMap(configFilePath);
     std::vector<Color> colorSequence = createColorSequenceFromLog(regexToColor, logFilePath);
+    std::cout << "Rendering " << colorSequence.size() << " events" << std::endl;
+
     // image width, bar width, bar height, max image height
     const int IMAGE_WIDTH = 1000;
     const int MAX_IMAGE_HEIGHT = 1000;
-    const int BAR_WIDTH = 10;
+    const int BAR_WIDTH = 20;
     const int BAR_HEIGHT = 100;
+
+    // max number of samples that can be drawn is: (width / bar width) * (max height / bar height)
+    cv::Mat img = Renderer::Render(colorSequence, IMAGE_WIDTH, MAX_IMAGE_HEIGHT, BAR_WIDTH, BAR_HEIGHT);
+    cv::imwrite("test.png", img);
 
     return 0;
 }
